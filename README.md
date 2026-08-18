@@ -9,6 +9,8 @@ Backed by PostgreSQL.
 - Go (stdlib `net/http`), pgx/v5, bcrypt password hashing
 - JWT (HS256) access tokens + rotating opaque refresh tokens (stored hashed)
 - Embedded SQL migrations applied automatically on startup
+- Redis-backed per-IP rate limiting on auth endpoints (HTTP 429 / gRPC
+  `RESOURCE_EXHAUSTED`); fails open if Redis is down
 - gRPC API (`proto/auth/v1/auth.proto`) served alongside HTTP; generated code
   committed under `gen/` (contracts will move to a standalone repo later)
 
@@ -32,6 +34,7 @@ go run ./cmd/server
 | ------------------- | -------- | ------- | ------------------------------------ |
 | `DATABASE_URL`      | yes      | —       | Postgres connection string           |
 | `JWT_SECRET`        | yes      | —       | HMAC secret for access tokens        |
+| `REDIS_URL`         | no       | `redis://localhost:6379/0` | Redis for rate limiting |
 | `PORT`              | no       | `8080`  | HTTP listen port                     |
 | `GRPC_PORT`         | no       | `9090`  | gRPC listen port                     |
 | `ACCESS_TOKEN_TTL`  | no       | `15m`   | Access token lifetime (Go duration)  |
@@ -81,6 +84,21 @@ Requires `Authorization: Bearer <access_token>`. Returns the current user.
 ### `GET /healthz`
 
 Liveness probe.
+
+## Rate limiting
+
+Per client IP, fixed one-minute windows, enforced via Redis on both HTTP and
+gRPC:
+
+| Endpoint            | Limit  |
+| ------------------- | ------ |
+| register            | 5/min  |
+| login               | 10/min |
+| refresh / logout    | 30/min |
+
+HTTP responses include `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and
+`Retry-After` (on 429). gRPC returns `RESOURCE_EXHAUSTED`. If Redis is
+unavailable the limiter fails open (requests pass, errors logged).
 
 ## gRPC API
 

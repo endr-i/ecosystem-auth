@@ -10,6 +10,7 @@ type Config struct {
 	Port            string
 	GRPCPort        string
 	DatabaseURL     string
+	RedisURL        string
 	JWTSecret       []byte
 	AccessTokenTTL  time.Duration
 	RefreshTokenTTL time.Duration
@@ -30,6 +31,7 @@ func Load() (*Config, error) {
 		Port:            getEnv("PORT", "8080"),
 		GRPCPort:        getEnv("GRPC_PORT", "9090"),
 		DatabaseURL:     dbURL,
+		RedisURL:        getEnv("REDIS_URL", "redis://localhost:6379/0"),
 		JWTSecret:       []byte(secret),
 		AccessTokenTTL:  getDuration("ACCESS_TOKEN_TTL", 15*time.Minute),
 		RefreshTokenTTL: getDuration("REFRESH_TOKEN_TTL", 30*24*time.Hour),
