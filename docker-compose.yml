@@ -15,10 +15,21 @@ services:
       timeout: 3s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   auth:
     build: .
     environment:
       DATABASE_URL: postgres://auth:auth@db:5432/auth?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
       JWT_SECRET: change-me-in-production
       PORT: "8080"
       GRPC_PORT: "9090"
@@ -27,6 +38,8 @@ services:
       - "9090:9090"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
 volumes:

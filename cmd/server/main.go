@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthv1 "google.golang.org/grpc/health/grpc_health_v1"
@@ -22,6 +23,7 @@ import (
 	"github.com/endr-i/ecosystem-auth/internal/db"
 	"github.com/endr-i/ecosystem-auth/internal/grpcapi"
 	"github.com/endr-i/ecosystem-auth/internal/httpapi"
+	"github.com/endr-i/ecosystem-auth/internal/ratelimit"
 	"github.com/endr-i/ecosystem-auth/internal/user"
 )
 
@@ -57,13 +59,27 @@ func main() {
 		BcryptCost:      cfg.BcryptCost,
 	}, users, pool)
 
+	redisOpts, err := redis.ParseURL(cfg.RedisURL)
+	if err != nil {
+		log.Error("parse redis url", "err", err)
+		os.Exit(1)
+	}
+	rdb := redis.NewClient(redisOpts)
+	defer rdb.Close()
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		log.Error("redis connect", "err", err)
+		os.Exit(1)
+	}
+	limiter := ratelimit.NewLimiter(rdb)
+	policy := ratelimit.DefaultPolicy()
+
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           httpapi.NewServer(authSvc, users, log).Routes(),
+		Handler:           httpapi.NewServer(authSvc, users, log, limiter, policy).Routes(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	grpcSrv := grpc.NewServer()
+	grpcSrv := grpc.NewServer(grpc.UnaryInterceptor(limiter.UnaryInterceptor(policy, log)))
 	authv1.RegisterAuthServiceServer(grpcSrv, grpcapi.NewServer(authSvc, users, log))
 	healthv1.RegisterHealthServer(grpcSrv, health.NewServer())
 	reflection.Register(grpcSrv)

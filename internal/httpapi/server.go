@@ -9,25 +9,40 @@ import (
 	"strings"
 
 	"github.com/endr-i/ecosystem-auth/internal/auth"
+	"github.com/endr-i/ecosystem-auth/internal/ratelimit"
 	"github.com/endr-i/ecosystem-auth/internal/user"
 )
 
 type Server struct {
-	auth  *auth.Service
-	users *user.Repository
-	log   *slog.Logger
+	auth    *auth.Service
+	users   *user.Repository
+	log     *slog.Logger
+	limiter *ratelimit.Limiter
+	policy  ratelimit.Policy
 }
 
-func NewServer(a *auth.Service, u *user.Repository, log *slog.Logger) *Server {
-	return &Server{auth: a, users: u, log: log}
+func NewServer(a *auth.Service, u *user.Repository, log *slog.Logger, limiter *ratelimit.Limiter, policy ratelimit.Policy) *Server {
+	return &Server{auth: a, users: u, log: log, limiter: limiter, policy: policy}
+}
+
+// limited wraps h with the rate limit named name, if one is configured.
+func (s *Server) limited(name string, h http.HandlerFunc) http.Handler {
+	if s.limiter == nil {
+		return h
+	}
+	limit, ok := s.policy[name]
+	if !ok {
+		return h
+	}
+	return s.limiter.Middleware(name, limit, s.log, h)
 }
 
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/v1/register", s.handleRegister)
-	mux.HandleFunc("POST /api/v1/login", s.handleLogin)
-	mux.HandleFunc("POST /api/v1/refresh", s.handleRefresh)
-	mux.HandleFunc("POST /api/v1/logout", s.handleLogout)
+	mux.Handle("POST /api/v1/register", s.limited("register", s.handleRegister))
+	mux.Handle("POST /api/v1/login", s.limited("login", s.handleLogin))
+	mux.Handle("POST /api/v1/refresh", s.limited("refresh", s.handleRefresh))
+	mux.Handle("POST /api/v1/logout", s.limited("logout", s.handleLogout))
 	mux.Handle("GET /api/v1/me", s.requireAuth(http.HandlerFunc(s.handleMe)))
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	return s.withLogging(mux)
