@@ -9,6 +9,8 @@ Backed by PostgreSQL.
 - Go (stdlib `net/http`), pgx/v5, bcrypt password hashing
 - JWT (HS256) access tokens + rotating opaque refresh tokens (stored hashed)
 - Embedded SQL migrations applied automatically on startup
+- gRPC API (`proto/auth/v1/auth.proto`) served alongside HTTP; generated code
+  committed under `gen/` (contracts will move to a standalone repo later)
 
 ## Running
 
@@ -31,6 +33,7 @@ go run ./cmd/server
 | `DATABASE_URL`      | yes      | —       | Postgres connection string           |
 | `JWT_SECRET`        | yes      | —       | HMAC secret for access tokens        |
 | `PORT`              | no       | `8080`  | HTTP listen port                     |
+| `GRPC_PORT`         | no       | `9090`  | gRPC listen port                     |
 | `ACCESS_TOKEN_TTL`  | no       | `15m`   | Access token lifetime (Go duration)  |
 | `REFRESH_TOKEN_TTL` | no       | `720h`  | Refresh token lifetime (Go duration) |
 
@@ -78,6 +81,30 @@ Requires `Authorization: Bearer <access_token>`. Returns the current user.
 ### `GET /healthz`
 
 Liveness probe.
+
+## gRPC API
+
+`auth.v1.AuthService` (see [`proto/auth/v1/auth.proto`](proto/auth/v1/auth.proto)),
+served on `GRPC_PORT` with reflection and the standard health service enabled:
+
+- `Register`, `Login`, `RefreshToken`, `Logout` — mirror the HTTP endpoints
+- `ValidateToken` — for other services to verify access tokens
+- `GetMe` — fetch the user for an access token
+
+Example with [grpcurl](https://github.com/fullstorydev/grpcurl):
+
+```sh
+grpcurl -plaintext -d '{"email":"a@example.com","password":"password123","phone":"+15551234567"}' \
+  localhost:9090 auth.v1.AuthService/Register
+```
+
+### Regenerating stubs
+
+Requires [buf](https://buf.build), `protoc-gen-go`, and `protoc-gen-go-grpc`:
+
+```sh
+buf generate
+```
 
 ## Tests
 
