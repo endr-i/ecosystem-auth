@@ -1,0 +1,91 @@
+syntax = "proto3";
+
+package auth.v1;
+
+option go_package = "github.com/endr-i/ecosystem-auth/gen/auth/v1;authv1";
+
+import "google/protobuf/timestamp.proto";
+
+// AuthService provides registration, authentication and token management.
+service AuthService {
+  // Register creates a new user with email, password and phone (for future MFA).
+  rpc Register(RegisterRequest) returns (RegisterResponse);
+  // Login authenticates with email + password and returns a token pair.
+  rpc Login(LoginRequest) returns (LoginResponse);
+  // RefreshToken rotates a refresh token and returns a new token pair.
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenResponse);
+  // Logout revokes a refresh token.
+  rpc Logout(LogoutRequest) returns (LogoutResponse);
+  // ValidateToken verifies an access token; intended for other services.
+  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
+  // GetMe returns the user identified by the access token.
+  rpc GetMe(GetMeRequest) returns (GetMeResponse);
+}
+
+message User {
+  string id = 1;
+  string email = 2;
+  string phone = 3;
+  bool phone_verified = 4;
+  bool mfa_enabled = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+message TokenPair {
+  string access_token = 1;
+  string refresh_token = 2;
+  string token_type = 3;
+  int64 expires_in = 4;
+}
+
+message RegisterRequest {
+  string email = 1;
+  string password = 2;
+  // E.164 format, e.g. +15551234567. Required for future MFA.
+  string phone = 3;
+}
+
+message RegisterResponse {
+  User user = 1;
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  User user = 1;
+  TokenPair tokens = 2;
+}
+
+message RefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+message RefreshTokenResponse {
+  TokenPair tokens = 1;
+}
+
+message LogoutRequest {
+  string refresh_token = 1;
+}
+
+message LogoutResponse {}
+
+message ValidateTokenRequest {
+  string access_token = 1;
+}
+
+message ValidateTokenResponse {
+  bool valid = 1;
+  string user_id = 2;
+}
+
+message GetMeRequest {
+  string access_token = 1;
+}
+
+message GetMeResponse {
+  User user = 1;
+}

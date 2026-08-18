@@ -4,15 +4,23 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthv1 "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
+
+	authv1 "github.com/endr-i/ecosystem-auth/gen/auth/v1"
 	"github.com/endr-i/ecosystem-auth/internal/auth"
 	"github.com/endr-i/ecosystem-auth/internal/config"
 	"github.com/endr-i/ecosystem-auth/internal/db"
+	"github.com/endr-i/ecosystem-auth/internal/grpcapi"
 	"github.com/endr-i/ecosystem-auth/internal/httpapi"
 	"github.com/endr-i/ecosystem-auth/internal/user"
 )
@@ -55,10 +63,29 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
+	grpcSrv := grpc.NewServer()
+	authv1.RegisterAuthServiceServer(grpcSrv, grpcapi.NewServer(authSvc, users, log))
+	healthv1.RegisterHealthServer(grpcSrv, health.NewServer())
+	reflection.Register(grpcSrv)
+
 	go func() {
-		log.Info("listening", "port", cfg.Port)
+		log.Info("http listening", "port", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Error("server", "err", err)
+			log.Error("http server", "err", err)
+			stop()
+		}
+	}()
+
+	go func() {
+		lis, err := net.Listen("tcp", ":"+cfg.GRPCPort)
+		if err != nil {
+			log.Error("grpc listen", "err", err)
+			stop()
+			return
+		}
+		log.Info("grpc listening", "port", cfg.GRPCPort)
+		if err := grpcSrv.Serve(lis); err != nil {
+			log.Error("grpc server", "err", err)
 			stop()
 		}
 	}()
@@ -68,4 +95,5 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutdownCtx)
+	grpcSrv.GracefulStop()
 }

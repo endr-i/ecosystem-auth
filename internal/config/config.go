@@ -8,6 +8,7 @@ import (
 
 type Config struct {
 	Port            string
+	GRPCPort        string
 	DatabaseURL     string
 	JWTSecret       []byte
 	AccessTokenTTL  time.Duration
@@ -27,6 +28,7 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		Port:            getEnv("PORT", "8080"),
+		GRPCPort:        getEnv("GRPC_PORT", "9090"),
 		DatabaseURL:     dbURL,
 		JWTSecret:       []byte(secret),
 		AccessTokenTTL:  getDuration("ACCESS_TOKEN_TTL", 15*time.Minute),
