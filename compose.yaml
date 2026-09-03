@@ -1,0 +1,33 @@
+# Default stack: the auth service alone, joined to the shared `ecosystem`
+# network provided by ecosystem-infra (postgres + redis).
+# Start ecosystem-infra first, then `make up`.
+# For a fully self-contained stack instead, use `make dev-up` (compose.dev.yaml).
+name: ecosystem-auth
+
+services:
+  auth:
+    build: .
+    container_name: ecosystem-auth
+    restart: unless-stopped
+    # Run as the host user so the read-only ./keys mount (0600 private keys)
+    # is readable; falls back to the image's nonroot uid.
+    user: "${DOCKER_USER:-65532:65532}"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:postgres@postgres:5432/auth?sslmode=disable}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      JWT_KEYS_DIR: /keys
+      JWT_ACTIVE_KID: ${JWT_ACTIVE_KID:-}
+      PORT: "8080"
+      GRPC_PORT: "9090"
+    volumes:
+      - ./keys:/keys:ro
+    ports:
+      - "${PORT:-8080}:8080"
+      - "${GRPC_PORT:-9090}:9090"
+    networks:
+      - ecosystem
+
+networks:
+  ecosystem:
+    name: ecosystem
+    external: true
