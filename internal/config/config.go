@@ -11,7 +11,8 @@ type Config struct {
 	GRPCPort        string
 	DatabaseURL     string
 	RedisURL        string
-	JWTSecret       []byte
+	JWTKeysDir      string
+	JWTActiveKID    string
 	AccessTokenTTL  time.Duration
 	RefreshTokenTTL time.Duration
 	BcryptCost      int
@@ -22,17 +23,13 @@ func Load() (*Config, error) {
 	if dbURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")
 	}
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		return nil, fmt.Errorf("JWT_SECRET is required")
-	}
-
 	cfg := &Config{
 		Port:            getEnv("PORT", "8080"),
 		GRPCPort:        getEnv("GRPC_PORT", "9090"),
 		DatabaseURL:     dbURL,
 		RedisURL:        getEnv("REDIS_URL", "redis://localhost:6379/0"),
-		JWTSecret:       []byte(secret),
+		JWTKeysDir:      getEnv("JWT_KEYS_DIR", "keys"),
+		JWTActiveKID:    os.Getenv("JWT_ACTIVE_KID"),
 		AccessTokenTTL:  getDuration("ACCESS_TOKEN_TTL", 15*time.Minute),
 		RefreshTokenTTL: getDuration("REFRESH_TOKEN_TTL", 30*24*time.Hour),
 		BcryptCost:      12,

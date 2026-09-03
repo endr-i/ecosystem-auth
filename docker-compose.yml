@@ -27,12 +27,17 @@ services:
 
   auth:
     build: .
+    # Run as the host user so the read-only ./keys mount (0600 private keys)
+    # is readable; falls back to the image's nonroot uid.
+    user: "${DOCKER_USER:-65532:65532}"
     environment:
       DATABASE_URL: postgres://auth:auth@db:5432/auth?sslmode=disable
       REDIS_URL: redis://redis:6379/0
-      JWT_SECRET: change-me-in-production
+      JWT_KEYS_DIR: /keys
       PORT: "8080"
       GRPC_PORT: "9090"
+    volumes:
+      - ./keys:/keys:ro
     ports:
       - "8080:8080"
       - "9090:9090"

@@ -44,6 +44,7 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("POST /api/v1/refresh", s.limited("refresh", s.handleRefresh))
 	mux.Handle("POST /api/v1/logout", s.limited("logout", s.handleLogout))
 	mux.Handle("GET /api/v1/me", s.requireAuth(http.HandlerFunc(s.handleMe)))
+	mux.HandleFunc("GET /.well-known/jwks.json", s.handleJWKS)
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	return s.withLogging(mux)
 }
@@ -141,6 +142,13 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, http.StatusOK, u)
+}
+
+// handleJWKS publishes the public signing keys so other services can verify
+// access tokens without calling back into this one.
+func (s *Server) handleJWKS(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	s.writeJSON(w, http.StatusOK, s.auth.JWKS())
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {

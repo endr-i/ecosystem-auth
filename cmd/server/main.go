@@ -23,6 +23,7 @@ import (
 	"github.com/endr-i/ecosystem-auth/internal/db"
 	"github.com/endr-i/ecosystem-auth/internal/grpcapi"
 	"github.com/endr-i/ecosystem-auth/internal/httpapi"
+	"github.com/endr-i/ecosystem-auth/internal/keys"
 	"github.com/endr-i/ecosystem-auth/internal/ratelimit"
 	"github.com/endr-i/ecosystem-auth/internal/user"
 )
@@ -51,9 +52,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	keySet, err := keys.Load(cfg.JWTKeysDir, cfg.JWTActiveKID)
+	if err != nil {
+		log.Error("load signing keys", "err", err, "dir", cfg.JWTKeysDir)
+		os.Exit(1)
+	}
+	log.Info("signing keys loaded", "dir", cfg.JWTKeysDir, "active_kid", keySet.Active().ID)
+
 	users := user.NewRepository(pool)
 	authSvc := auth.NewService(auth.Config{
-		JWTSecret:       cfg.JWTSecret,
+		Keys:            keySet,
 		AccessTokenTTL:  cfg.AccessTokenTTL,
 		RefreshTokenTTL: cfg.RefreshTokenTTL,
 		BcryptCost:      cfg.BcryptCost,
