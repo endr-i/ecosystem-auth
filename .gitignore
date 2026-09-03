@@ -30,3 +30,8 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+bin/
+
+# RS256 signing keys (generate with `make keygen`)
+keys/

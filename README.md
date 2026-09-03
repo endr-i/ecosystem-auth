@@ -7,7 +7,9 @@ Backed by PostgreSQL.
 ## Stack
 
 - Go (stdlib `net/http`), pgx/v5, bcrypt password hashing
-- JWT (HS256) access tokens + rotating opaque refresh tokens (stored hashed)
+- JWT (RS256) access tokens with a `kid` header + rotating opaque refresh
+  tokens (stored hashed)
+- Public keys published at `GET /.well-known/jwks.json` for other services
 - Embedded SQL migrations applied automatically on startup
 - Redis-backed per-IP rate limiting on auth endpoints (HTTP 429 / gRPC
   `RESOURCE_EXHAUSTED`); fails open if Redis is down
@@ -16,15 +18,32 @@ Backed by PostgreSQL.
 
 ## Running
 
+A `Makefile` wraps the common workflows — run `make help` for the full list.
+
+Full stack in Docker:
+
 ```sh
-docker compose up --build
+make up      # build and start auth + Postgres + Redis
+make logs    # tail logs
+make down    # stop everything (make reset also drops the db volume)
 ```
 
-Or locally against your own Postgres:
+Server locally, dependencies in Docker:
+
+```sh
+make start   # starts Postgres + Redis, then runs the server
+```
+
+Overrides are plain make variables, e.g. `make run PORT=8081`.
+
+Both `make up` and `make run` generate a signing key on first use if `keys/`
+is empty; see [Signing keys](#signing-keys).
+
+Or fully by hand against your own Postgres:
 
 ```sh
 export DATABASE_URL=postgres://auth:auth@localhost:5432/auth?sslmode=disable
-export JWT_SECRET=your-secret
+go run ./cmd/keygen        # writes keys/key-YYYY-MM.pem
 go run ./cmd/server
 ```
 
@@ -33,16 +52,55 @@ go run ./cmd/server
 | Env var             | Required | Default | Description                          |
 | ------------------- | -------- | ------- | ------------------------------------ |
 | `DATABASE_URL`      | yes      | —       | Postgres connection string           |
-| `JWT_SECRET`        | yes      | —       | HMAC secret for access tokens        |
+| `JWT_KEYS_DIR`      | no       | `keys`  | Directory of RS256 private keys (PEM) |
+| `JWT_ACTIVE_KID`    | no       | newest  | Key id to sign with; defaults to the greatest kid |
 | `REDIS_URL`         | no       | `redis://localhost:6379/0` | Redis for rate limiting |
 | `PORT`              | no       | `8080`  | HTTP listen port                     |
 | `GRPC_PORT`         | no       | `9090`  | gRPC listen port                     |
 | `ACCESS_TOKEN_TTL`  | no       | `15m`   | Access token lifetime (Go duration)  |
 | `REFRESH_TOKEN_TTL` | no       | `720h`  | Refresh token lifetime (Go duration) |
 
+### Signing keys
+
+Access tokens are signed with **RS256**. Private keys live as PKCS#8 PEM files
+in `JWT_KEYS_DIR`; the file name is the key id (`keys/key-2026-09.pem` →
+`kid: key-2026-09`). Generate one with:
+
+```sh
+make keygen                  # kid defaults to key-YYYY-MM
+make keygen KID=key-2026-10  # explicit kid
+```
+
+Every key in the directory is trusted for verification, so rotation is: drop in
+a new key with a greater kid, restart, and keep the old key around until all
+outstanding tokens have expired. Pin a specific signer with `JWT_ACTIVE_KID`.
+
+Keys are gitignored — never commit them. In Docker they are mounted read-only
+at `/keys`.
+
 ## API
 
 Base path: `/api/v1`
+
+### `GET /.well-known/jwks.json`
+
+Not under the base path. Public keys for other services to verify access
+tokens locally. No auth required; cacheable for 5 minutes.
+
+```json
+{
+  "keys": [
+    {
+      "kid": "key-2026-09",
+      "kty": "RSA",
+      "use": "sig",
+      "alg": "RS256",
+      "n": "...",
+      "e": "AQAB"
+    }
+  ]
+}
+```
 
 ### `POST /api/v1/register`
 
@@ -121,11 +179,13 @@ grpcurl -plaintext -d '{"email":"a@example.com","password":"password123","phone"
 Requires [buf](https://buf.build), `protoc-gen-go`, and `protoc-gen-go-grpc`:
 
 ```sh
-buf generate
+make proto     # buf generate
+make proto-lint
 ```
 
 ## Tests
 
 ```sh
-go test ./...
+make test      # go test ./...
+make check     # fmt + vet + test
 ```

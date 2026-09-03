@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/endr-i/ecosystem-auth/internal/keys"
 	"github.com/endr-i/ecosystem-auth/internal/user"
 )
 
@@ -31,7 +32,7 @@ var (
 )
 
 type Config struct {
-	JWTSecret       []byte
+	Keys            *keys.Set
 	AccessTokenTTL  time.Duration
 	RefreshTokenTTL time.Duration
 	BcryptCost      int
@@ -165,7 +166,18 @@ func (s *Service) newAccessClaims(userID string) *jwt.RegisteredClaims {
 }
 
 func (s *Service) signAccessToken(claims *jwt.RegisteredClaims) (string, error) {
-	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(s.cfg.JWTSecret)
+	key := s.cfg.Keys.Active()
+	if key == nil {
+		return "", errors.New("no active signing key")
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	token.Header["kid"] = key.ID
+	return token.SignedString(key.Private)
+}
+
+// JWKS returns the public keys other services use to verify issued tokens.
+func (s *Service) JWKS() keys.JWKS {
+	return s.cfg.Keys.JWKS()
 }
 
 func (s *Service) issueTokens(ctx context.Context, userID string) (*TokenPair, error) {
@@ -201,11 +213,15 @@ func (s *Service) issueTokens(ctx context.Context, userID string) (*TokenPair, e
 func (s *Service) VerifyAccessToken(tokenStr string) (string, error) {
 	token, err := jwt.ParseWithClaims(tokenStr, &jwt.RegisteredClaims{},
 		func(t *jwt.Token) (any, error) {
-			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			if _, ok := t.Method.(*jwt.SigningMethodRSA); !ok {
 				return nil, fmt.Errorf("unexpected signing method %v", t.Header["alg"])
 			}
-			return s.cfg.JWTSecret, nil
-		})
+			kid, _ := t.Header["kid"].(string)
+			if kid == "" {
+				return nil, errors.New("token is missing a kid header")
+			}
+			return s.cfg.Keys.Lookup(kid)
+		}, jwt.WithValidMethods([]string{"RS256"}))
 	if err != nil || !token.Valid {
 		return "", ErrInvalidToken
 	}
