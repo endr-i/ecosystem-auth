@@ -3,13 +3,15 @@ BIN_DIR := bin
 PKG := ./cmd/server
 IMAGE := ecosystem-auth
 COMPOSE := docker compose
+COMPOSE_DEV := docker compose -f compose.dev.yaml
+ECOSYSTEM_NETWORK ?= ecosystem
 
 # Containers read the ./keys mount, so run them as the host user.
 export DOCKER_USER := $(shell id -u):$(shell id -g)
 
 # Local development defaults. Override on the command line, e.g.
 #   make run PORT=8081
-DATABASE_URL ?= postgres://auth:auth@localhost:5432/auth?sslmode=disable
+DATABASE_URL ?= postgres://postgres:postgres@localhost:5432/auth?sslmode=disable
 REDIS_URL ?= redis://localhost:6379/0
 JWT_KEYS_DIR ?= keys
 JWT_ACTIVE_KID ?=
@@ -29,11 +31,8 @@ help: ## Show this help
 ## --- Development ---
 
 .PHONY: run
-run: keys ## Run the server locally (requires deps: make deps-up)
+run: keys ## Run the server on the host (needs ecosystem-infra or make deps-up)
 	$(RUN_ENV) go run $(PKG)
-
-.PHONY: start
-start: deps-up run ## Start dependencies, then run the server locally
 
 ## --- Signing keys ---
 
@@ -93,35 +92,65 @@ proto: ## Generate protobuf/gRPC code
 proto-lint: ## Lint protobuf definitions
 	buf lint
 
-## --- Docker ---
+## --- Docker (shared ecosystem infra) ---
 
-.PHONY: deps-up
-deps-up: ## Start Postgres and Redis only
-	$(COMPOSE) up -d db redis
-
-.PHONY: deps-down
-deps-down: ## Stop Postgres and Redis
-	$(COMPOSE) stop db redis
-
-.PHONY: up
-up: keys ## Start the full stack in the background
+.PHONY: up start
+start: up ## Alias for `make up`
+up: keys check-network ## Build and start auth on the shared ecosystem network
 	$(COMPOSE) up -d --build
 
 .PHONY: down
-down: ## Stop the stack and remove containers
+down: ## Stop auth and remove its container
 	$(COMPOSE) down
 
-.PHONY: reset
-reset: ## Stop the stack and delete database volumes
-	$(COMPOSE) down -v
+.PHONY: restart
+restart: down up ## Restart auth (picks up new signing keys)
 
 .PHONY: logs
-logs: ## Tail logs of the stack
+logs: ## Tail auth logs
 	$(COMPOSE) logs -f
 
 .PHONY: ps
-ps: ## Show stack status
+ps: ## Show auth container status
 	$(COMPOSE) ps
+
+.PHONY: check-network
+check-network: ## Verify the shared ecosystem network exists
+	@docker network inspect $(ECOSYSTEM_NETWORK) >/dev/null 2>&1 || { \
+		echo "docker network '$(ECOSYSTEM_NETWORK)' not found."; \
+		echo "Start ecosystem-infra first (make up in that repo), or use 'make dev-up'."; \
+		exit 1; \
+	}
+
+## --- Docker (self-contained dev stack) ---
+
+.PHONY: dev-up
+dev-up: keys ## Start auth with its own throwaway postgres + redis
+	$(COMPOSE_DEV) up -d --build
+
+.PHONY: dev-down
+dev-down: ## Stop the dev stack and remove containers
+	$(COMPOSE_DEV) down
+
+.PHONY: dev-reset
+dev-reset: ## Stop the dev stack and delete its database volume
+	$(COMPOSE_DEV) down -v
+
+.PHONY: dev-logs
+dev-logs: ## Tail dev stack logs
+	$(COMPOSE_DEV) logs -f
+
+.PHONY: dev-ps
+dev-ps: ## Show dev stack status
+	$(COMPOSE_DEV) ps
+
+.PHONY: deps-up
+deps-up: ## Start only the dev postgres + redis (no auth container)
+	$(COMPOSE_DEV) up -d db redis
+
+.PHONY: deps-down
+deps-down: ## Stop the dev postgres + redis
+	$(COMPOSE_DEV) stop db redis
 
 .PHONY: docker-build
 docker-build: ## Build the Docker image

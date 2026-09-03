@@ -1,3 +1,10 @@
+# Self-contained dev stack: auth plus its own throwaway postgres and redis.
+# Use `make dev-up`. The default stack (compose.yaml) instead attaches to the
+# shared `ecosystem` network from ecosystem-infra.
+# It publishes the same host ports as ecosystem-infra, so stop infra first or
+# override DEV_POSTGRES_PORT / DEV_REDIS_PORT / PORT / GRPC_PORT.
+name: ecosystem-auth-dev
+
 services:
   db:
     image: postgres:16-alpine
@@ -6,7 +13,7 @@ services:
       POSTGRES_PASSWORD: auth
       POSTGRES_DB: auth
     ports:
-      - "5432:5432"
+      - "${DEV_POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -18,7 +25,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "${DEV_REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -39,8 +46,8 @@ services:
     volumes:
       - ./keys:/keys:ro
     ports:
-      - "8080:8080"
-      - "9090:9090"
+      - "${PORT:-8080}:8080"
+      - "${GRPC_PORT:-9090}:9090"
     depends_on:
       db:
         condition: service_healthy

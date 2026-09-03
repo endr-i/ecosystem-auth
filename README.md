@@ -20,29 +20,52 @@ Backed by PostgreSQL.
 
 A `Makefile` wraps the common workflows — run `make help` for the full list.
 
-Full stack in Docker:
+### Default: shared ecosystem infra
+
+Postgres and Redis come from [`ecosystem-infra`](../ecosystem-infra), which
+owns the `ecosystem` docker network. Start it first, then:
 
 ```sh
-make up      # build and start auth + Postgres + Redis
-make logs    # tail logs
-make down    # stop everything (make reset also drops the db volume)
+make up       # or `make start` — build auth and join the ecosystem network
+make logs
+make restart  # e.g. after adding a signing key
+make down
 ```
 
-Server locally, dependencies in Docker:
+The container is named `ecosystem-auth` and talks to `postgres:5432/auth` and
+`redis:6379` inside the network; `make up` fails early with a hint if the
+network is missing. Ports 8080/9090 are published to the host.
+
+### Self-contained dev stack
+
+`compose.dev.yaml` still bundles a throwaway Postgres and Redis, for working on
+this service without infra running:
 
 ```sh
-make start   # starts Postgres + Redis, then runs the server
+make dev-up
+make dev-logs
+make dev-down     # dev-reset also drops the db volume
+```
+
+It publishes the same host ports as infra, so stop infra first or override
+`DEV_POSTGRES_PORT` / `DEV_REDIS_PORT` / `PORT` / `GRPC_PORT`.
+
+### On the host
+
+```sh
+make run          # go run against localhost:5432 / localhost:6379
+make deps-up      # only if infra is not running: dev postgres + redis
 ```
 
 Overrides are plain make variables, e.g. `make run PORT=8081`.
 
-Both `make up` and `make run` generate a signing key on first use if `keys/`
-is empty; see [Signing keys](#signing-keys).
+`make up`, `make dev-up` and `make run` generate a signing key on first use if
+`keys/` is empty; see [Signing keys](#signing-keys).
 
 Or fully by hand against your own Postgres:
 
 ```sh
-export DATABASE_URL=postgres://auth:auth@localhost:5432/auth?sslmode=disable
+export DATABASE_URL=postgres://postgres:postgres@localhost:5432/auth?sslmode=disable
 go run ./cmd/keygen        # writes keys/key-YYYY-MM.pem
 go run ./cmd/server
 ```
