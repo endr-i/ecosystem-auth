@@ -34,4 +34,4 @@ go.work.sum
 bin/
 
 # RS256 signing keys (generate with `make keygen`)
-keys/
+/keys/
