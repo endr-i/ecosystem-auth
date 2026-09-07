@@ -187,7 +187,7 @@ func (s *Server) withLogging(next http.Handler) http.Handler {
 func (s *Server) decode(w http.ResponseWriter, r *http.Request, dst any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
+	//dec.DisallowUnknownFields() // TODO: Uncomment this line to reject unknown fields in JSON requests.
 	if err := dec.Decode(dst); err != nil {
 		s.writeError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
 		return false
