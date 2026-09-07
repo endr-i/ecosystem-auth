@@ -76,7 +76,7 @@ func ValidateRegistration(email, password, phone string) error {
 	if len(password) > 72 {
 		return validationError("password must be at most 72 characters")
 	}
-	if !phoneRe.MatchString(strings.ReplaceAll(phone, " ", "")) {
+	if phone != "" && !phoneRe.MatchString(strings.ReplaceAll(phone, " ", "")) {
 		return validationError("invalid phone number, expected E.164 format like +15551234567")
 	}
 	return nil

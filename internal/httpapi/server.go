@@ -67,6 +67,8 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 			s.writeError(w, http.StatusBadRequest, err.Error())
 		case errors.Is(err, user.ErrEmailTaken):
 			s.writeError(w, http.StatusConflict, "email already registered")
+		case errors.Is(err, user.ErrPhoneTaken):
+			s.writeError(w, http.StatusConflict, "phone already registered")
 		default:
 			s.internalError(w, r, err)
 		}

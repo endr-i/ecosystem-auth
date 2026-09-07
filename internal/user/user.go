@@ -13,6 +13,7 @@ import (
 
 var (
 	ErrEmailTaken = errors.New("email already registered")
+	ErrPhoneTaken = errors.New("phone already registered")
 	ErrNotFound   = errors.New("user not found")
 )
 
@@ -34,7 +35,7 @@ func NewRepository(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
-const userColumns = `id, email, password_hash, phone, phone_verified, mfa_enabled, created_at`
+const userColumns = `id, email, password_hash, COALESCE(phone, ''), phone_verified, mfa_enabled, created_at`
 
 func scanUser(row pgx.Row) (*User, error) {
 	var u User
@@ -51,13 +52,16 @@ func scanUser(row pgx.Row) (*User, error) {
 func (r *Repository) Create(ctx context.Context, email, passwordHash, phone string) (*User, error) {
 	row := r.pool.QueryRow(ctx, `
 		INSERT INTO users (email, password_hash, phone)
-		VALUES ($1, $2, $3)
+		VALUES ($1, $2, NULLIF($3, ''))
 		RETURNING `+userColumns,
 		email, passwordHash, phone)
 	u, err := scanUser(row)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			if pgErr.ConstraintName == "users_phone_key" {
+				return nil, ErrPhoneTaken
+			}
 			return nil, ErrEmailTaken
 		}
 		return nil, fmt.Errorf("insert user: %w", err)

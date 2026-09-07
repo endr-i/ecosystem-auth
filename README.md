@@ -1,8 +1,8 @@
 # ecosystem-auth
 
 Auth + registration microservice in Go. Users register and authenticate with
-email + password; a phone number is required at registration for future MFA.
-Backed by PostgreSQL.
+email + password; an optional, unique phone number can be provided at
+registration for future MFA. Backed by PostgreSQL.
 
 ## Stack
 
@@ -131,8 +131,8 @@ tokens locally. No auth required; cacheable for 5 minutes.
 { "email": "a@example.com", "password": "password123", "phone": "+15551234567" }
 ```
 
-Password ≥ 8 chars; phone in E.164 format. Returns `201` with the user, `409`
-if the email is taken.
+Password ≥ 8 chars; phone, if provided, must be in E.164 format and unique.
+Returns `201` with the user, `409` if the email or phone is taken.
 
 ### `POST /api/v1/login`
 

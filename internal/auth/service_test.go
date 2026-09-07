@@ -24,7 +24,7 @@ func TestValidateRegistration(t *testing.T) {
 		{"bad email", "not-an-email", "password123", "+15551234567", true},
 		{"empty email", "", "password123", "+15551234567", true},
 		{"short password", "a@example.com", "short", "+15551234567", true},
-		{"missing phone", "a@example.com", "password123", "", true},
+		{"missing phone", "a@example.com", "password123", "", false},
 		{"bad phone", "a@example.com", "password123", "abc123", true},
 		{"phone leading zero", "a@example.com", "password123", "+05551234567", true},
 	}

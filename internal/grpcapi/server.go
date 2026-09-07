@@ -53,6 +53,8 @@ func (s *Server) mapError(err error) error {
 		return status.Error(codes.InvalidArgument, err.Error())
 	case errors.Is(err, user.ErrEmailTaken):
 		return status.Error(codes.AlreadyExists, "email already registered")
+	case errors.Is(err, user.ErrPhoneTaken):
+		return status.Error(codes.AlreadyExists, "phone already registered")
 	case errors.Is(err, auth.ErrInvalidCredentials):
 		return status.Error(codes.Unauthenticated, "invalid email or password")
 	case errors.Is(err, auth.ErrInvalidToken):
